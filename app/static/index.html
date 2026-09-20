@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Untangle</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <button id="newChat" class="btn primary block" type="button">+ New chat</button>
+    <div class="side-title">Conversations</div>
+    <ul id="sessionList" class="session-list"></ul>
+    <div class="side-bottom">
+      <button id="memoryBtn" class="btn ghost block" type="button">What I remember</button>
+      <button id="themeBtn" class="btn ghost block" type="button">Toggle theme</button>
+      <p class="fineprint">Runs entirely on this computer. Nothing you write leaves it.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Show or hide conversations">&#9776;</button>
+      <div class="title">Untangle</div>
+      <div id="status" class="status"><span class="dot"></span><span id="statusText">checking&hellip;</span></div>
+    </header>
+
+    <section id="setup" class="setup hidden">
+      <div class="setup-card">
+        <h2>One-time setup</h2>
+        <p>Choose the topics to download reference material for. This needs the internet once; afterwards
+           everything works offline.</p>
+        <div id="topicList" class="topic-list"></div>
+        <button id="setupBtn" class="btn primary" type="button">Download and index</button>
+        <p id="setupMsg" class="setup-msg" role="status"></p>
+      </div>
+    </section>
+
+    <section id="chat" class="chat">
+      <div id="empty" class="empty">
+        <h1>How can I help today?</h1>
+        <p>Talk through a decision, a disagreement, or something that's weighing on you.</p>
+        <div class="chips">
+          <button class="chip" type="button">I keep going back and forth on a decision</button>
+          <button class="chip" type="button">I had a fight with someone close to me</button>
+          <button class="chip" type="button">I feel like I'm not good enough</button>
+        </div>
+      </div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+    </section>
+
+    <footer class="composer-wrap">
+      <form id="composer" class="composer">
+        <textarea id="input" rows="1" placeholder="Message&hellip; (Enter to send, Shift+Enter for a new line)"></textarea>
+        <button id="sendBtn" class="send" type="submit" aria-label="Send">&#8593;</button>
+      </form>
+      <p class="fineprint center">A reflective tool, not a therapist or a crisis service.</p>
+    </footer>
+  </main>
+</div>
+
+<dialog id="memoryDialog" class="dialog">
+  <h3>What I remember about you</h3>
+  <p class="fineprint">A short private summary built from your conversations, kept on this computer. You can edit or erase it.</p>
+  <textarea id="memoryText" rows="8"></textarea>
+  <div class="dialog-actions">
+    <button id="memoryClear" class="btn danger" type="button">Erase</button>
+    <span class="grow"></span>
+    <button id="memoryClose" class="btn ghost" type="button">Close</button>
+    <button id="memorySave" class="btn primary" type="button">Save</button>
+  </div>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>
