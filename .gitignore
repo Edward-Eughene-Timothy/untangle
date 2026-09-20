@@ -19,3 +19,15 @@ fastembed_cache/
 .DS_Store
 .idea/
 .vscode/
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+
+# Tool caches and logs
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.log

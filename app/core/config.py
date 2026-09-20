@@ -1,7 +1,11 @@
 """Application settings (Pydantic v2 BaseSettings, environment / .env driven)."""
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_CRISIS_TEXT = (
     "It sounds like you may be carrying something really painful right now. If you might act on "
@@ -12,7 +16,13 @@ DEFAULT_CRISIS_TEXT = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Resolve .env next to the project root, so it is found no matter which directory uvicorn is
+    # started from (a relative ".env" silently does nothing when launched from e.g. app/).
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # --- Required by the blueprint -------------------------------------------------------
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -38,6 +48,10 @@ class Settings(BaseSettings):
     RECENT_TURNS: int = 8  # last N messages (user + assistant) sent to the model
     SUMMARY_EVERY_N_TURNS: int = 6  # refresh the long-term profile after this many exchanges
     EMOTION_TIMEOUT_S: float = 2.0  # max time to wait for emotion analysis before streaming
+    # The emotion pass is a second LLM call per message. On slow hardware it competes with the reply
+    # for the same CPU/GPU, so turning it off can cut latency noticeably. The keyword-based safety
+    # check still runs either way.
+    EMOTION_ANALYSIS_ENABLED: bool = True
 
     # --- LLM -----------------------------------------------------------------------------
     OLLAMA_KEEP_ALIVE: str = "30m"  # keep the model resident so first-token latency stays low
@@ -46,7 +60,7 @@ class Settings(BaseSettings):
     PRELOAD_ON_STARTUP: bool = True
 
     # --- Warm-up crawler -----------------------------------------------------------------
-    CRAWL_USER_AGENT: str = "ConflictResolutionAssistant/2.0 (local warm-up; respects robots.txt)"
+    CRAWL_USER_AGENT: str = "Untangle/2.0 (local warm-up; respects robots.txt)"
     CRAWL_TIMEOUT_S: float = 20.0
     CRAWL_CONCURRENCY: int = 4
 
@@ -54,6 +68,16 @@ class Settings(BaseSettings):
     REQUIRE_WARMUP: bool = True  # refuse /stream_counsel until warm-up has succeeded once
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     CRISIS_RESOURCES_TEXT: str = DEFAULT_CRISIS_TEXT
+
+    @field_validator("QDRANT_STORAGE_PATH", "SQLITE_DB_PATH", "FASTEMBED_CACHE_PATH")
+    @classmethod
+    def _anchor_to_project_root(cls, v: str) -> str:
+        """Relative data paths mean "inside the project", not "wherever uvicorn was launched from",
+        so starting the server from another directory can never create a second, empty database."""
+        if v == ":memory:":
+            return v
+        p = Path(v).expanduser()
+        return str(p if p.is_absolute() else (PROJECT_ROOT / p).resolve())
 
 
 @lru_cache
