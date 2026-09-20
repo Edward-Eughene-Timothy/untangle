@@ -2,10 +2,12 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.api import api_router
 from app.core.config import Settings, get_settings
@@ -19,6 +21,8 @@ from app.services.rag_engine import Embedder, FastEmbedder, RagEngine
 from app.services.warmup_service import PageFetcher, WarmupService
 
 logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app(
@@ -80,9 +84,9 @@ def create_app(
             qdrant.close()
 
     app = FastAPI(
-        title="Conflict Resolution Assistant",
+        title="Untangle",
         version="2.0.0",
-        description="100% local, privacy-first counseling and inner-conflict assistant.",
+        description="A private, on-device companion for untangling hard decisions, inner conflicts and difficult conversations.",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -92,6 +96,8 @@ def create_app(
         allow_headers=["*"],
     )
     app.include_router(api_router, prefix="/api/v1")
+    # The chat UI. Mounted last so it never shadows /api or /docs.
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
     return app
 
 
