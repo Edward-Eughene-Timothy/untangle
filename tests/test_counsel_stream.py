@@ -115,3 +115,135 @@ def test_ollama_down_yields_error_event(make_client):
         events = chat(c, "Are you there?")
         assert events[-1][0] == "error" and "ollama serve" in events[-1][1]["message"]
         assert c.get(f"{API}/health").json()["status"] == "degraded"
+
+
+def test_emotion_analysis_can_be_disabled(settings, ollama):
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from tests.conftest import FakeEmbedder, fake_fetcher
+
+    settings.EMOTION_ANALYSIS_ENABLED = False
+    app = create_app(
+        settings, embedder=FakeEmbedder(), page_fetcher=fake_fetcher,
+        ollama_transport=httpx.MockTransport(ollama.handler),
+    )
+    with TestClient(app) as c:
+        c.post(f"{API}/setup/warmup", json={"topics": ["cbt"]})
+        events = chat(c, "I keep replaying an argument with a friend.")
+        assert events[-1][0] == "done"
+        assert [x for x in ollama.calls if not x.get("stream") and x.get("format")] == []  # no emotion call
+        crisis = chat(c, "I want to kill myself.")
+        assert "safety" in [k for k, _ in crisis]  # keyword safety net still works
+
+
+def test_bare_greeting_skips_the_model_and_the_profile(warmed, ollama):
+    warmed.put(f"{API}/profile", json={"summary": "Fought with a friend."})
+    before = len(ollama.stream_calls)
+    events = chat(warmed, "Hello!")
+    assert [k for k, _ in events] == ["meta", "token", "done"]
+    assert len(ollama.stream_calls) == before  # no LLM call
+    sid = events[0][1]["session_id"]
+    assert len(warmed.get(f"{API}/sessions/{sid}").json()["messages"]) == 2
+
+
+def test_profile_is_marked_as_background_only(warmed, ollama):
+    warmed.put(f"{API}/profile", json={"summary": "Fought with a friend."})
+    chat(warmed, "I need help deciding on a laptop for college.")
+    system = ollama.stream_calls[-1]["messages"][0]["content"]
+    assert "Fought with a friend." in system and "Do NOT bring these up" in system
+    assert "You are an AI" in system
+
+
+def test_greeting_shortcut_tolerates_typos(warmed, ollama):
+    from app.services.counselor_agent import is_greeting
+
+    for ok in ["helllo", "heyyy!", "hii", "Hello there", "good morning", "HELO"]:
+        assert is_greeting(ok), ok
+    for no in ["hello, I need advice", "hi I fought with my sister", "history", "help me"]:
+        assert not is_greeting(no), no
+
+
+def test_thinking_is_disabled_on_every_llm_request(warmed, ollama):
+    chat(warmed, "I can't decide between two job offers.")
+    assert ollama.calls, "expected at least one Ollama call"
+    assert all(c.get("think") is False for c in ollama.calls)
+
+
+def test_done_event_reports_llm_timing_and_persona_is_honest(warmed, ollama):
+    done = chat(warmed, "I keep second-guessing every choice I make.")[-1][1]
+    assert done["llm"] == {
+        "prompt_tokens": 123, "prompt_s": 2.0, "load_s": 0.0, "gen_tokens": 20, "gen_tok_per_s": 20.0,
+    }
+    system = ollama.stream_calls[-1]["messages"][0]["content"]
+    assert "AI language model" in system and "running locally" in system
+
+
+def _system(ollama):
+    return ollama.stream_calls[-1]["messages"][0]["content"]
+
+
+def test_explicit_request_for_help_switches_to_guidance_mode(warmed, ollama):
+    chat(warmed, "give me a guide in how to overcome this")
+    assert "PRACTICAL GUIDANCE" in _system(ollama)
+    chat(warmed, "I felt a bit odd at work today.")
+    assert "PRACTICAL GUIDANCE" not in _system(ollama)
+
+
+def test_repeated_exchanges_nudge_away_from_only_asking_questions(warmed, ollama):
+    sid = chat(warmed, "Work has been strange lately.")[0][1]["session_id"]
+    chat(warmed, "My manager barely talks to me.", session_id=sid)
+    assert "already asked several questions" not in _system(ollama)
+    chat(warmed, "I keep wondering what I did wrong.", session_id=sid)
+    assert "already asked several questions" in _system(ollama)
+
+
+def test_crisis_overrides_guidance_mode(warmed, ollama):
+    chat(warmed, "I want to kill myself, give me steps to cope")
+    system = _system(ollama)
+    assert "SAFETY PRIORITY" in system and "PRACTICAL GUIDANCE" not in system
+
+
+def test_done_event_reports_prep_time(warmed):
+    done = chat(warmed, "I feel stuck between two options.")[-1][1]
+    assert isinstance(done["prep_ms"], int) and done["prep_ms"] <= done["ttft_ms"]
+
+
+def test_wants_guidance_detector():
+    from app.services.counselor_agent import wants_guidance
+
+    for yes in ["give me a guide in howt o over ocme", "how to overcome this", "What should I do?",
+                "any tips?", "help me cope with it", "can you suggest something"]:
+        assert wants_guidance(yes), yes
+    for no in ["I feel sad today", "my sister and I argued", "he never listens to me", "thanks"]:
+        assert not wants_guidance(no), no
+
+
+def test_style_note_names_phrases_the_model_just_overused():
+    from app.services.counselor_agent import style_note
+
+    hist = [
+        {"role": "user", "content": "I feel stuck."},
+        {"role": "assistant", "content": "It sounds like you're stuck. I wonder what changed?"},
+        {"role": "user", "content": "Everything."},
+        {"role": "assistant", "content": "It sounds like a lot is going on."},
+    ]
+    note = style_note(hist)
+    assert '"It sounds like"' in note and '"I wonder"' in note and "I hear that" not in note
+    assert style_note([]) is None
+    assert style_note([{"role": "assistant", "content": "Take a slow breath."}]) is None
+    # only the last two replies count
+    old = [{"role": "assistant", "content": "I wonder why."}] + [{"role": "assistant", "content": "Okay."}] * 2
+    assert style_note(old) is None
+
+
+def test_style_note_reaches_the_prompt_and_persona_no_longer_teaches_the_phrase(warmed, ollama):
+    from app.services.counselor_agent import PERSONA
+
+    assert 'I wonder if' not in PERSONA
+    ollama.tokens = ["It sounds like ", "you're tired. ", "I wonder why?"]
+    sid = chat(warmed, "Work has been exhausting lately.")[0][1]["session_id"]
+    chat(warmed, "I can't switch off in the evenings.", session_id=sid)
+    system = ollama.stream_calls[-1]["messages"][0]["content"]
+    assert "STYLE:" in system and '"It sounds like"' in system and '"I wonder"' in system

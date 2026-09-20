@@ -21,6 +21,7 @@ class OllamaClient:
         keep_alive: str = "30m",
         temperature: float = 0.6,
         num_ctx: int = 4096,
+        think: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -28,6 +29,10 @@ class OllamaClient:
         self.keep_alive = keep_alive
         self.temperature = temperature
         self.num_ctx = num_ctx
+        # Reasoning models (e.g. Gemma 4) otherwise write hundreds of hidden "thinking" tokens before
+        # the first visible word, which on a CPU means tens of seconds of silence. Non-thinking
+        # models accept and ignore this flag.
+        self.think = think
         # Long read timeout: the first request after a cold start has to load the model.
         self._http = httpx.AsyncClient(
             base_url=self.base_url,
@@ -49,6 +54,7 @@ class OllamaClient:
             "model": self.model,
             "messages": messages,
             "stream": stream,
+            "think": self.think,
             "keep_alive": self.keep_alive,
             "options": options,
         }
@@ -66,8 +72,12 @@ class OllamaClient:
         hint = " Try `ollama pull <model>`." if resp.status_code == 404 else ""
         return f"Ollama returned {resp.status_code}: {msg}.{hint}"
 
-    async def stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:
-        """Yield assistant tokens as Ollama produces them."""
+    async def stream_chat(
+        self, messages: list[dict], stats: dict | None = None
+    ) -> AsyncIterator[str]:
+        """Yield assistant tokens as Ollama produces them. If `stats` is given, it is filled with
+        Ollama's timing fields (prompt_eval_count, prompt_eval_duration, eval_count, ...) once the
+        stream ends."""
         try:
             async with self._http.stream(
                 "POST", "/api/chat", json=self._payload(messages, stream=True)
@@ -87,6 +97,10 @@ class OllamaClient:
                     if token:
                         yield token
                     if data.get("done"):
+                        if stats is not None:
+                            for k in ("prompt_eval_count", "prompt_eval_duration", "eval_count",
+                                      "eval_duration", "load_duration", "total_duration"):
+                                stats[k] = data.get(k)
                         break
         except httpx.ConnectError as exc:
             raise OllamaError(

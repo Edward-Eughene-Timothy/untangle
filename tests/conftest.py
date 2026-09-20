@@ -72,7 +72,11 @@ class FakeOllama:
                     json.dumps({"message": {"role": "assistant", "content": t}, "done": False})
                     for t in self.tokens
                 ]
-                lines.append(json.dumps({"message": {"role": "assistant", "content": ""}, "done": True}))
+                lines.append(json.dumps({
+                    "message": {"role": "assistant", "content": ""}, "done": True,
+                    "prompt_eval_count": 123, "prompt_eval_duration": 2_000_000_000,
+                    "eval_count": 20, "eval_duration": 1_000_000_000, "load_duration": 0,
+                }))
                 return httpx.Response(200, content=("\n".join(lines) + "\n").encode())
             content = json.dumps(self.emotion) if body.get("format") else self.summary
             return httpx.Response(200, json={"message": {"role": "assistant", "content": content}})
