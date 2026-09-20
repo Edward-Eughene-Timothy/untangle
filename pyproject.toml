@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "conflict-resolution-assistant"
+name = "untangle-app"
 version = "2.0.0"
-description = "100% Local, Privacy-First Psychological Counseling & Inner-Conflict Assistant"
+description = "Untangle: a 100% local, privacy-first companion for working through hard decisions, inner conflicts and difficult conversations."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,7 +20,11 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Edward-Eughene-Timothy/untangle"
+
 [project.optional-dependencies]
+cli = ["prompt_toolkit>=3.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
