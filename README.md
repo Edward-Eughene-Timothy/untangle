@@ -247,8 +247,9 @@ proved the idea. This rebuild keeps the purpose and replaces almost everything u
 Untangle began as a team project for the Intel oneAPI Hackathon 2024:
 
 - [**Edward-Eughene-Timothy**](https://github.com/Edward-Eughene-Timothy)
-- [**ariya10**](https://github.com/ariya10)
-- [**arputhan06-tech**](https://github.com/arputhan06-tech)
+- [**Ariya Sree**](https://github.com/ariya10)
+- [**Arputhan**](https://github.com/arputhan06-tech)
+- [**Anandha Kumar**](https://github.com/anandh2006)
 
 ## Acknowledgements
 
